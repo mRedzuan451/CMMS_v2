@@ -1,0 +1,6 @@
+id: 1, fullName: 'Admin User', employeeId: 'A001', username: 'admin', password: 'admin123', role: 'Admin', divisionId: 1, departmentId: 1 },
+id: 2, fullName: 'John Engineer', employeeId: 'E001', username: 'jengineer', password: 'password', role: 'Engineer', divisionId: 1, departmentId: 1 },
+id: 3, fullName: 'Jane Clerk', employeeId: 'C001', username: 'jclerk', password: 'password', role: 'Clerk', divisionId: 1, departmentId: 2 },
+id: 4, fullName: 'Mike Manager', employeeId: 'M001', username: 'mmanager', password: 'password', role: 'Manager', divisionId: 2, departmentId: 3 },
+id: 5, fullName: 'Susan Supervisor', employeeId: 'S001', username: 'ssupervisor', password: 'password', role: 'Supervisor', divisionId: 1, departmentId: 1 },
+id: 6, fullName: 'Tom Technician', employeeId: 'T001', username: 'ttechnician', password: 'password', role: 'Technician', divisionId: 1, departmentId: 2 },
