@@ -2447,11 +2447,60 @@
         }
     }
 
+    // =================================================================================
+    // START: CORRECTED FUNCTIONS
+    // =================================================================================
 
+    /**
+     * @description Handles the generation of recurring work orders after one is completed.
+     * This function now takes the current workOrders array as an argument to prevent race conditions.
+     * @param {object} completedWo The work order object that was just completed.
+     * @param {Array} workOrders The current array of all work order objects.
+     * @returns {Array} The modified workOrders array, possibly with a new recurring task added.
+     */
+    function triggerCompletionTasks(completedWo, workOrders) {
+        // Handle recurring work orders by creating the next one
+        if (completedWo.frequency !== 'One-Time') {
+            const [year, month, day] = completedWo.completedDate.split('T')[0].split('-').map(Number);
+            const nextDueDate = new Date(Date.UTC(year, month - 1, day));
+
+            switch(completedWo.frequency) {
+                case 'Daily': nextDueDate.setUTCDate(nextDueDate.getUTCDate() + 1); break;
+                case 'Weekly': nextDueDate.setUTCDate(nextDueDate.getUTCDate() + 7); break;
+                case 'Monthly': nextDueDate.setUTCMonth(nextDueDate.getUTCMonth() + 1); break;
+                case 'Yearly': nextDueDate.setUTCFullYear(nextDueDate.getUTCFullYear() + 1); break;
+            }
+            
+            const newWo = JSON.parse(JSON.stringify(completedWo)); // Deep copy
+
+            // Reset properties for the new recurring work order
+            newWo.id = getNextId('workOrders');
+            newWo.status = 'Open';
+            newWo.dueDate = nextDueDate.toISOString().split('T')[0];
+            delete newWo.completedDate;
+            delete newWo.completionNotes;
+            delete newWo.breakdownTimestamp;
+            
+            // Reset checklist items
+            if (newWo.checklist) {
+                newWo.checklist.forEach(item => item.completed = false);
+            }
+            
+            workOrders.push(newWo);
+            logActivity('Recurring WO Generated', `New WO created for ${newWo.title}, due ${newWo.dueDate}`);
+        }
+        return workOrders;
+    }
+
+    /**
+     * @description Handles the submission of the main work order form for creating or editing.
+     * This function has been corrected to prevent a data loss bug when creating a new,
+     * already-completed, recurring work order.
+     */
     function handleWorkOrderFormSubmit(e) {
         e.preventDefault();
         const woId = document.getElementById('workOrderId').value;
-        const workOrders = db.get('workOrders');
+        let workOrders = db.get('workOrders');
         
         const requiredParts = [];
         const task = document.getElementById('woTask').value;
@@ -2491,7 +2540,6 @@
             const oldStatus = workOrders[index].status;
             workOrders[index] = { ...workOrders[index], ...woData };
 
-            // Check if status changed to 'Completed'
             if (newStatus === 'Completed' && oldStatus !== 'Completed') {
                 showCompleteWorkOrderModal(parseInt(woId));
             } else {
@@ -2500,69 +2548,26 @@
 
         } else {
             woData.id = getNextId('workOrders');
-            if (woData.status === 'Completed') {
-                woData.completedDate = new Date().toISOString();
-                triggerCompletionTasks(woData);
-            }
             workOrders.push(woData);
             logActivity('Work Order Created', `Created WO: ${woData.title}`);
+
+            if (woData.status === 'Completed') {
+                woData.completedDate = new Date().toISOString();
+                // Call the corrected trigger function, passing the in-memory array
+                workOrders = triggerCompletionTasks(woData, workOrders);
+            }
         }
         
         db.set('workOrders', workOrders);
         document.getElementById('workOrderModal').style.display = 'none';
         render();
     }
-    
-    function deleteWorkOrder(woId) {
-        if (confirm('Are you sure you want to delete this work order?')) {
-            let workOrders = db.get('workOrders');
-            const woToDelete = workOrders.find(w => w.id === woId);
-            workOrders = workOrders.filter(w => w.id !== woId);
-            db.set('workOrders', workOrders);
-            logActivity('Work Order Deleted', `Deleted WO: ${woToDelete.title}`);
-            render();
-        }
-    }
-    
-    function triggerCompletionTasks(completedWo) {
-        // ... (part deduction logic remains the same)
 
-        // Handle recurring work orders by creating the next one
-        if (completedWo.frequency !== 'One-Time') {
-            const [year, month, day] = completedWo.completedDate.split('T')[0].split('-').map(Number);
-            const nextDueDate = new Date(Date.UTC(year, month - 1, day));
-
-            switch(completedWo.frequency) {
-                case 'Daily': nextDueDate.setUTCDate(nextDueDate.getUTCDate() + 1); break;
-                case 'Weekly': nextDueDate.setUTCDate(nextDueDate.getUTCDate() + 7); break;
-                case 'Monthly': nextDueDate.setUTCMonth(nextDueDate.getUTCMonth() + 1); break;
-                case 'Yearly': nextDueDate.setUTCFullYear(nextDueDate.getUTCFullYear() + 1); break;
-            }
-            
-            const newWo = JSON.parse(JSON.stringify(completedWo)); // Deep copy
-
-            // Reset properties for the new recurring work order
-            newWo.id = getNextId('workOrders');
-            newWo.status = 'Open';
-            newWo.dueDate = nextDueDate.toISOString().split('T')[0];
-            delete newWo.completedDate;
-            delete newWo.completionNotes;
-            delete newWo.breakdownTimestamp;
-            
-            // Reset checklist items
-            if (newWo.checklist) {
-                newWo.checklist.forEach(item => item.completed = false);
-            }
-            
-            const workOrders = db.get('workOrders');
-            workOrders.push(newWo);
-            db.set('workOrders', workOrders);
-            logActivity('Recurring WO Generated', `New WO created for ${newWo.title}, due ${newWo.dueDate}`);
-
-            // ... (auto-request parts logic remains the same)
-        }
-    }
-
+    /**
+     * @description Handles the submission of the "Complete Work Order" modal form.
+     * This function has been corrected to use the refactored triggerCompletionTasks
+     * function, ensuring data is saved correctly in one step.
+     */
     function handleCompleteWorkOrderFormSubmit(e) {
         e.preventDefault();
         const woId = parseInt(document.getElementById('completeWorkOrderId').value);
@@ -2591,15 +2596,31 @@
                 wo.checklist.forEach(item => item.completed = true);
             }
             
-            // Save the completed work order FIRST.
-            db.set('workOrders', workOrders);
             logActivity('Work Order Completed', `Completed WO #${wo.id}: ${wo.title}`);
             
-            // Now handle recurring tasks and part deductions
-            triggerCompletionTasks(wo);
+            // Handle recurring tasks by passing the in-memory array
+            workOrders = triggerCompletionTasks(wo, workOrders);
+            
+            // Save the final, modified array once
+            db.set('workOrders', workOrders);
             
             document.getElementById('completeWorkOrderModal').style.display = 'none';
             render(); // Re-render the UI
+        }
+    }
+
+    // =================================================================================
+    // END: CORRECTED FUNCTIONS
+    // =================================================================================
+    
+    function deleteWorkOrder(woId) {
+        if (confirm('Are you sure you want to delete this work order?')) {
+            let workOrders = db.get('workOrders');
+            const woToDelete = workOrders.find(w => w.id === woId);
+            workOrders = workOrders.filter(w => w.id !== woId);
+            db.set('workOrders', workOrders);
+            logActivity('Work Order Deleted', `Deleted WO: ${woToDelete.title}`);
+            render();
         }
     }
 
