@@ -113,7 +113,7 @@
     <div id="app" class="hidden">
       <aside
         id="sidebar"
-        class="bg-gray-800 text-white w-64 min-h-screen fixed"
+        class="bg-gray-800 text-white w-64 min-h-screen fixed flex flex-col"
       >
         <div class="p-4 border-b border-gray-700">
           <h2 class="text-xl font-bold">ManCIS V3</h2>
@@ -123,11 +123,11 @@
           <p id="userRole" class="text-sm text-gray-400"></p>
           <p id="userDepartment" class="text-sm text-gray-400"></p>
         </div>
-        <nav id="navMenu" class="p-4 space-y-2"></nav>
-        <div class="absolute bottom-0 w-full p-4 border-t border-gray-700">
+        <nav id="navMenu" class="p-4 space-y-2 flex-grow overflow-y-auto"></nav>
+        <div id="sidebar-footer" class="p-4 border-t border-gray-700">
           <button
             id="logoutBtn"
-            class="w-full flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-colors"
+            class="w-full flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded transition-colors mb-2"
           >
             <i class="fas fa-sign-out-alt mr-2"></i> Logout
           </button>
@@ -135,6 +135,34 @@
       </aside>
 
       <main id="mainContent" class="ml-64 p-8"></main>
+    </div>
+
+    <div id="confirmClearModal" class="modal">
+      <div class="modal-content">
+        <h2 class="text-xl font-bold mb-4 text-red-600">
+          Confirm Data Deletion
+        </h2>
+        <p>
+          Are you sure you want to clear all application data? This action is
+          irreversible and will reset the application to its initial state.
+        </p>
+        <div class="mt-6 flex justify-end space-x-4">
+          <button
+            type="button"
+            class="bg-gray-300 hover:bg-gray-400 text-black py-2 px-4 rounded"
+            data-close-modal
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            id="confirmClearBtn"
+            class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded"
+          >
+            Confirm Clear
+          </button>
+        </div>
+      </div>
     </div>
 
     <div id="registrationModal" class="modal">
@@ -3553,6 +3581,18 @@
             `
             )
             .join("");
+
+          const sidebarFooter = document.getElementById("sidebar-footer");
+          let footerContent =
+            sidebarFooter.querySelector("#logoutBtn").outerHTML;
+          if (state.currentUser.role === "Admin") {
+            footerContent += `
+                <button id="clearDataBtn" class="w-full flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded transition-colors mt-2">
+                    <i class="fas fa-bomb mr-2"></i> Reset Application
+                </button>
+            `;
+          }
+          sidebarFooter.innerHTML = footerContent;
         }
 
         function renderMainContent() {
@@ -3658,6 +3698,15 @@
           state.currentUser = null;
           state.currentPage = "dashboard";
           render();
+        }
+
+        function handleClearData() {
+          document.getElementById("confirmClearModal").style.display = "flex";
+        }
+
+        function handleConfirmClear() {
+          localStorage.clear();
+          location.reload();
         }
 
         function handleRegistration(e) {
@@ -4949,6 +4998,17 @@
           document
             .getElementById("logoutBtn")
             .addEventListener("click", handleLogout);
+          document
+            .getElementById("confirmClearBtn")
+            .addEventListener("click", handleConfirmClear);
+
+          document
+            .getElementById("sidebar-footer")
+            .addEventListener("click", (e) => {
+              if (e.target.id === "clearDataBtn") {
+                handleClearData();
+              }
+            });
 
           document.getElementById("sidebar").addEventListener("click", (e) => {
             const navLink = e.target.closest(".nav-link");
