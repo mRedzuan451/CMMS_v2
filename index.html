@@ -53,27 +53,6 @@
         background-color: #f7fafc;
         color: #a0aec0;
       }
-
-      /* Styles for Printing Reports */
-      @media print {
-        body * {
-          visibility: hidden;
-        }
-        #print-area,
-        #print-area * {
-          visibility: visible;
-        }
-        #print-area {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-        }
-        @page {
-          size: A4;
-          margin: 20mm;
-        }
-      }
     </style>
   </head>
   <body class="bg-gray-100 font-sans">
@@ -1118,8 +1097,6 @@
       </div>
     </div>
 
-    <div id="print-area" class="hidden"></div>
-
     <script>
       (function () {
         "use strict";
@@ -1663,6 +1640,38 @@
               }
             }, 500);
           }, 3000);
+        }
+
+        function printReport(title, content) {
+          const printWindow = window.open("", "_blank", "height=600,width=800");
+          printWindow.document.write(
+            "<html><head><title>" + title + "</title>"
+          );
+          printWindow.document.write(`
+            <style>
+                body { font-family: Arial, sans-serif; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                h1 { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                h2 { background-color: #f2f2f2; padding: 10px; margin-top: 20px; border-bottom: 1px solid #ddd; }
+                p { margin-bottom: 20px; }
+                @page { size: A4; margin: 20mm; }
+                @media print {
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    h2 { background-color: #f2f2f2 !important; }
+                    tr { page-break-inside: avoid; }
+                }
+            </style>
+        `);
+          printWindow.document.write("</head><body>");
+          printWindow.document.write(content);
+          printWindow.document.write("</body></html>");
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(function () {
+            printWindow.print();
+            printWindow.close();
+          }, 250);
         }
 
         // =================================================================================
@@ -4485,9 +4494,9 @@
           if (searchTerm) {
             assetsToPrint = assetsToPrint.filter(
               (a) =>
-                a.name.toLowerCase().includes(searchTerm) ||
-                a.tag.toLowerCase().includes(searchTerm) ||
-                a.category.toLowerCase().includes(searchTerm)
+                (a.name && a.name.toLowerCase().includes(searchTerm)) ||
+                (a.tag && a.tag.toLowerCase().includes(searchTerm)) ||
+                (a.category && a.category.toLowerCase().includes(searchTerm))
             );
           }
 
@@ -4496,68 +4505,84 @@
           let groupedByDept = {};
 
           assetsToPrint.forEach((asset) => {
-            const [locType, locId] = asset.locationId.split("-");
-            const pLine = productionLines.find((l) => l.id === parseInt(locId));
-            if (!pLine) return;
-            const dept = departments.find((d) => d.id === pLine.departmentId);
-            if (!dept) return;
-
-            if (!groupedByDept[dept.name]) {
-              groupedByDept[dept.name] = [];
+            let deptName = "Unassigned";
+            if (asset.locationId && asset.locationId.startsWith("pl-")) {
+              const [locType, locId] = asset.locationId.split("-");
+              const pLine = productionLines.find(
+                (l) => l.id === parseInt(locId)
+              );
+              if (pLine) {
+                const dept = departments.find(
+                  (d) => d.id === pLine.departmentId
+                );
+                if (dept) {
+                  deptName = dept.name;
+                }
+              }
             }
-            groupedByDept[dept.name].push(asset);
+
+            if (!groupedByDept[deptName]) {
+              groupedByDept[deptName] = [];
+            }
+            groupedByDept[deptName].push(asset);
           });
 
           let printHtml = `
-            <div style="font-family: Arial, sans-serif; padding: 20px;">
-                <h1 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px;">Asset List Report</h1>
-                <p style="text-align: right; margin-bottom: 20px;">Printed on: ${new Date().toLocaleDateString()}</p>
+            <h1>Asset List Report</h1>
+            <p style="text-align: right;">Printed on: ${new Date().toLocaleDateString()}</p>
         `;
 
-          for (const deptName in groupedByDept) {
-            printHtml += `
-                <h2 style="background-color: #f2f2f2; padding: 10px; margin-top: 20px; border-bottom: 1px solid #ddd;">Department: ${deptName}</h2>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead>
-                        <tr style="background-color: #e0e0e0;">
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Asset Name</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Tag</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Location</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            groupedByDept[deptName].forEach((asset) => {
+          if (Object.keys(groupedByDept).length === 0) {
+            printHtml +=
+              '<p style="text-align: center; margin-top: 50px;">No assets found matching the current filter.</p>';
+          } else {
+            for (const deptName in groupedByDept) {
               printHtml += `
-                    <tr>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${
-                          asset.name
-                        }</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${
-                          asset.tag
-                        }</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${getFullLocationName(
-                          asset.locationId
-                        )}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${
-                          asset.status
-                        }</td>
-                    </tr>
+                    <h2>Department: ${deptName}</h2>
+                    <table>
+                        <thead>
+                            <tr style="background-color: #e0e0e0;">
+                                <th>Asset Name</th>
+                                <th>Tag</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                 `;
-            });
-            printHtml += `</tbody></table>`;
+              groupedByDept[deptName].forEach((asset) => {
+                printHtml += `
+                        <tr>
+                            <td>${asset.name}</td>
+                            <td>${asset.tag}</td>
+                            <td>${getFullLocationName(asset.locationId)}</td>
+                            <td>${asset.status}</td>
+                        </tr>
+                    `;
+              });
+              printHtml += `</tbody></table>`;
+            }
           }
 
-          printHtml += `</div>`;
-
-          const printArea = document.getElementById("print-area");
-          printArea.innerHTML = printHtml;
-          window.print();
+          printReport("Asset List Report", printHtml);
         }
 
         function handlePrintParts() {
-          const parts = db.get("parts").filter(can.view);
+          const searchTerm = document
+            .getElementById("partSearch")
+            .value.toLowerCase();
+          let partsToPrint = db.get("parts").filter(can.view);
+
+          if (searchTerm) {
+            partsToPrint = partsToPrint.filter(
+              (p) =>
+                p.name.toLowerCase().includes(searchTerm) ||
+                p.sku.toLowerCase().includes(searchTerm) ||
+                (p.category && p.category.toLowerCase().includes(searchTerm)) ||
+                (p.maker && p.maker.toLowerCase().includes(searchTerm))
+            );
+          }
+
           const {
             departments = [],
             cabinets = [],
@@ -4566,154 +4591,182 @@
           } = db.get("locations") || {};
           let groupedByDept = {};
 
-          parts.forEach((part) => {
+          partsToPrint.forEach((part) => {
+            let deptName = "Unassigned";
             if (
-              typeof part.locationId !== "string" ||
-              !part.locationId.includes("-")
-            )
-              return;
-            const [locType, locId] = part.locationId.split("-");
-            let deptId;
+              part.locationId &&
+              typeof part.locationId === "string" &&
+              part.locationId.includes("-")
+            ) {
+              const [locType, locId] = part.locationId.split("-");
+              let deptId;
 
-            if (locType === "box") {
-              const box = boxes.find((b) => b.id === parseInt(locId));
-              if (!box) return;
-              const shelf = shelves.find((s) => s.id === box.shelfId);
-              if (!shelf) return;
-              const cabinet = cabinets.find((c) => c.id === shelf.cabinetId);
-              if (cabinet) deptId = cabinet.departmentId;
-            } else if (locType === "sh") {
-              const shelf = shelves.find((s) => s.id === parseInt(locId));
-              if (!shelf) return;
-              const cabinet = cabinets.find((c) => c.id === shelf.cabinetId);
-              if (cabinet) deptId = cabinet.departmentId;
-            } else if (locType === "cab") {
-              const cabinet = cabinets.find((c) => c.id === parseInt(locId));
-              if (cabinet) deptId = cabinet.departmentId;
+              if (locType === "box") {
+                const box = boxes.find((b) => b.id === parseInt(locId));
+                if (box) {
+                  const shelf = shelves.find((s) => s.id === box.shelfId);
+                  if (shelf) {
+                    const cabinet = cabinets.find(
+                      (c) => c.id === shelf.cabinetId
+                    );
+                    if (cabinet) deptId = cabinet.departmentId;
+                  }
+                }
+              } else if (locType === "sh") {
+                const shelf = shelves.find((s) => s.id === parseInt(locId));
+                if (shelf) {
+                  const cabinet = cabinets.find(
+                    (c) => c.id === shelf.cabinetId
+                  );
+                  if (cabinet) deptId = cabinet.departmentId;
+                }
+              } else if (locType === "cab") {
+                const cabinet = cabinets.find((c) => c.id === parseInt(locId));
+                if (cabinet) deptId = cabinet.departmentId;
+              }
+
+              if (deptId) {
+                const dept = departments.find((d) => d.id === deptId);
+                if (dept) deptName = dept.name;
+              }
             }
 
-            if (!deptId) return;
-            const dept = departments.find((d) => d.id === deptId);
-            if (!dept) return;
-
-            if (!groupedByDept[dept.name]) {
-              groupedByDept[dept.name] = [];
+            if (!groupedByDept[deptName]) {
+              groupedByDept[deptName] = [];
             }
-            groupedByDept[dept.name].push(part);
+            groupedByDept[deptName].push(part);
           });
 
           let printHtml = `
-            <div style="font-family: Arial, sans-serif; padding: 20px;">
-                <h1 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px;">Spare Parts List Report</h1>
-                <p style="text-align: right; margin-bottom: 20px;">Printed on: ${new Date().toLocaleDateString()}</p>
+            <h1>Spare Parts List Report</h1>
+            <p style="text-align: right;">Printed on: ${new Date().toLocaleDateString()}</p>
         `;
 
-          for (const deptName in groupedByDept) {
-            printHtml += `
-                <h2 style="background-color: #f2f2f2; padding: 10px; margin-top: 20px; border-bottom: 1px solid #ddd;">Department: ${deptName}</h2>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead>
-                        <tr style="background-color: #e0e0e0;">
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Part Name</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">SKU</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Quantity</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Location</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            groupedByDept[deptName].forEach((part) => {
+          if (Object.keys(groupedByDept).length === 0) {
+            printHtml +=
+              '<p style="text-align: center; margin-top: 50px;">No parts found matching the current filter.</p>';
+          } else {
+            for (const deptName in groupedByDept) {
               printHtml += `
-                    <tr>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${
-                          part.name
-                        }</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${
-                          part.sku
-                        }</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${
-                          part.quantity
-                        }</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${getFullLocationName(
-                          part.locationId
-                        )}</td>
-                    </tr>
+                    <h2>Department: ${deptName}</h2>
+                    <table>
+                        <thead>
+                            <tr style="background-color: #e0e0e0;">
+                                <th>Part Name</th>
+                                <th>SKU</th>
+                                <th>Quantity</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                 `;
-            });
-            printHtml += `</tbody></table>`;
+              groupedByDept[deptName].forEach((part) => {
+                printHtml += `
+                        <tr>
+                            <td>${part.name}</td>
+                            <td>${part.sku}</td>
+                            <td>${part.quantity}</td>
+                            <td>${getFullLocationName(part.locationId)}</td>
+                        </tr>
+                    `;
+              });
+              printHtml += `</tbody></table>`;
+            }
           }
 
-          printHtml += `</div>`;
-
-          const printArea = document.getElementById("print-area");
-          printArea.innerHTML = printHtml;
-          window.print();
+          printReport("Spare Parts List Report", printHtml);
         }
 
         function handlePrintWorkOrders() {
-          const workOrders = db.get("workOrders").filter(can.view);
+          const searchTerm = document
+            .getElementById("workOrderSearch")
+            .value.toLowerCase();
           const assets = db.get("assets");
+          let workOrdersToPrint = db.get("workOrders").filter(can.view);
+
+          if (searchTerm) {
+            workOrdersToPrint = workOrdersToPrint.filter((wo) => {
+              const assetName =
+                assets.find((a) => a.id === wo.assetId)?.name || "";
+              return (
+                wo.title.toLowerCase().includes(searchTerm) ||
+                assetName.toLowerCase().includes(searchTerm)
+              );
+            });
+          }
+
           const { departments = [], productionLines = [] } =
             db.get("locations") || {};
           let groupedByDept = {};
 
-          workOrders.forEach((wo) => {
+          workOrdersToPrint.forEach((wo) => {
+            let deptName = "Unassigned";
             const asset = assets.find((a) => a.id === wo.assetId);
-            if (!asset) return;
-            const [locType, locId] = asset.locationId.split("-");
-            const pLine = productionLines.find((l) => l.id === parseInt(locId));
-            if (!pLine) return;
-            const dept = departments.find((d) => d.id === pLine.departmentId);
-            if (!dept) return;
-
-            if (!groupedByDept[dept.name]) {
-              groupedByDept[dept.name] = [];
+            if (
+              asset &&
+              asset.locationId &&
+              asset.locationId.startsWith("pl-")
+            ) {
+              const [locType, locId] = asset.locationId.split("-");
+              const pLine = productionLines.find(
+                (l) => l.id === parseInt(locId)
+              );
+              if (pLine) {
+                const dept = departments.find(
+                  (d) => d.id === pLine.departmentId
+                );
+                if (dept) deptName = dept.name;
+              }
             }
-            groupedByDept[dept.name].push(wo);
+
+            if (!groupedByDept[deptName]) {
+              groupedByDept[deptName] = [];
+            }
+            groupedByDept[deptName].push(wo);
           });
 
           let printHtml = `
-            <div style="font-family: Arial, sans-serif; padding: 20px;">
-                <h1 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px;">Work Order List Report</h1>
-                <p style="text-align: right; margin-bottom: 20px;">Printed on: ${new Date().toLocaleDateString()}</p>
+            <h1>Work Order List Report</h1>
+            <p style="text-align: right;">Printed on: ${new Date().toLocaleDateString()}</p>
         `;
 
-          for (const deptName in groupedByDept) {
-            printHtml += `
-                <h2 style="background-color: #f2f2f2; padding: 10px; margin-top: 20px; border-bottom: 1px solid #ddd;">Department: ${deptName}</h2>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead>
-                        <tr style="background-color: #e0e0e0;">
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Title</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Asset</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Due Date</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Priority</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            groupedByDept[deptName].forEach((wo) => {
-              const assetName =
-                assets.find((a) => a.id === wo.assetId)?.name || "N/A";
+          if (Object.keys(groupedByDept).length === 0) {
+            printHtml +=
+              '<p style="text-align: center; margin-top: 50px;">No work orders found matching the current filter.</p>';
+          } else {
+            for (const deptName in groupedByDept) {
               printHtml += `
-                    <tr>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${wo.title}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${assetName}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${wo.dueDate}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${wo.priority}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px;">${wo.status}</td>
-                    </tr>
+                    <h2>Department: ${deptName}</h2>
+                    <table>
+                        <thead>
+                            <tr style="background-color: #e0e0e0;">
+                                <th>Title</th>
+                                <th>Asset</th>
+                                <th>Due Date</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                 `;
-            });
-            printHtml += `</tbody></table>`;
+              groupedByDept[deptName].forEach((wo) => {
+                const assetName =
+                  assets.find((a) => a.id === wo.assetId)?.name || "N/A";
+                printHtml += `
+                        <tr>
+                            <td>${wo.title}</td>
+                            <td>${assetName}</td>
+                            <td>${wo.dueDate}</td>
+                            <td>${wo.priority}</td>
+                            <td>${wo.status}</td>
+                        </tr>
+                    `;
+              });
+              printHtml += `</tbody></table>`;
+            }
           }
 
-          printHtml += `</div>`;
-
-          const printArea = document.getElementById("print-area");
-          printArea.innerHTML = printHtml;
-          window.print();
+          printReport("Work Order List Report", printHtml);
         }
 
         function handlePrintPurchaseList() {
@@ -4732,49 +4785,34 @@
           const users = db.get("users");
 
           let printHtml = `
-            <div style="font-family: Arial, sans-serif; padding: 20px;">
-                <h1 style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px;">Purchase Request List</h1>
-                <p style="text-align: right; margin-bottom: 20px;">Printed on: ${new Date().toLocaleDateString()}</p>
-                <p style="margin-bottom: 20px;">Requested by: ${
-                  state.currentUser.fullName
-                }</p>
-                
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead>
-                        <tr style="background-color: #e0e0e0;">
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Part Name</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Part Number/SKU</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Maker</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: center;">Quantity</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Purpose</th>
-                            <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Requested By</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <h1>Purchase Request List</h1>
+            <p style="text-align: right;">Printed on: ${new Date().toLocaleDateString()}</p>
+            <p>Requested by: ${state.currentUser.fullName}</p>
+            
+            <table>
+                <thead>
+                    <tr style="background-color: #e0e0e0;">
+                        <th>Part Name</th>
+                        <th>Part Number/SKU</th>
+                        <th>Maker</th>
+                        <th>Quantity</th>
+                        <th>Purpose</th>
+                        <th>Requested By</th>
+                    </tr>
+                </thead>
+                <tbody>
         `;
 
           requestsToPurchase.forEach((req) => {
             const requester = users.find((u) => u.id === req.requesterId);
             printHtml += `
                 <tr>
-                    <td style="border: 1px solid #ccc; padding: 8px;">${
-                      req.newPartName
-                    }</td>
-                    <td style="border: 1px solid #ccc; padding: 8px;">${
-                      req.newPartNumber || "N/A"
-                    }</td>
-                    <td style="border: 1px solid #ccc; padding: 8px;">${
-                      req.newPartMaker || "N/A"
-                    }</td>
-                    <td style="border: 1px solid #ccc; padding: 8px; text-align: center;">${
-                      req.quantity
-                    }</td>
-                    <td style="border: 1px solid #ccc; padding: 8px;">${
-                      req.purpose
-                    }</td>
-                    <td style="border: 1px solid #ccc; padding: 8px;">${
-                      requester ? requester.fullName : "N/A"
-                    }</td>
+                    <td>${req.newPartName}</td>
+                    <td>${req.newPartNumber || "N/A"}</td>
+                    <td>${req.newPartMaker || "N/A"}</td>
+                    <td style="text-align: center;">${req.quantity}</td>
+                    <td>${req.purpose}</td>
+                    <td>${requester ? requester.fullName : "N/A"}</td>
                 </tr>
             `;
           });
@@ -4792,11 +4830,9 @@
                     <p>Approved By</p>
                 </div>
             </div>
-        </div>`;
+        `;
 
-          const printArea = document.getElementById("print-area");
-          printArea.innerHTML = printHtml;
-          window.print();
+          printReport("Purchase Request List", printHtml);
         }
 
         function handleAssetImport(event) {
