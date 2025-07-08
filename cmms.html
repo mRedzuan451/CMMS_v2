@@ -2454,21 +2454,31 @@
     /**
      * @description Handles the generation of recurring work orders after one is completed.
      * This function now takes the current workOrders array as an argument to prevent race conditions.
+     * It also uses local date methods to avoid timezone-related bugs.
      * @param {object} completedWo The work order object that was just completed.
      * @param {Array} workOrders The current array of all work order objects.
      * @returns {Array} The modified workOrders array, possibly with a new recurring task added.
      */
     function triggerCompletionTasks(completedWo, workOrders) {
-        // Handle recurring work orders by creating the next one
         if (completedWo.frequency !== 'One-Time') {
-            const [year, month, day] = completedWo.completedDate.split('T')[0].split('-').map(Number);
-            const nextDueDate = new Date(Date.UTC(year, month - 1, day));
+            // Use the completedDate string, and create a new Date object from it.
+            // This approach is more robust as it avoids timezone issues from the ISO string.
+            const lastDate = new Date(completedWo.completedDate);
+            const nextDueDate = new Date(lastDate.getTime());
 
             switch(completedWo.frequency) {
-                case 'Daily': nextDueDate.setUTCDate(nextDueDate.getUTCDate() + 1); break;
-                case 'Weekly': nextDueDate.setUTCDate(nextDueDate.getUTCDate() + 7); break;
-                case 'Monthly': nextDueDate.setUTCMonth(nextDueDate.getUTCMonth() + 1); break;
-                case 'Yearly': nextDueDate.setUTCFullYear(nextDueDate.getUTCFullYear() + 1); break;
+                case 'Daily': 
+                    nextDueDate.setDate(nextDueDate.getDate() + 1); 
+                    break;
+                case 'Weekly': 
+                    nextDueDate.setDate(nextDueDate.getDate() + 7); 
+                    break;
+                case 'Monthly': 
+                    nextDueDate.setMonth(nextDueDate.getMonth() + 1); 
+                    break;
+                case 'Yearly': 
+                    nextDueDate.setFullYear(nextDueDate.getFullYear() + 1); 
+                    break;
             }
             
             const newWo = JSON.parse(JSON.stringify(completedWo)); // Deep copy
@@ -2476,6 +2486,7 @@
             // Reset properties for the new recurring work order
             newWo.id = getNextId('workOrders');
             newWo.status = 'Open';
+            // Format the date into YYYY-MM-DD string for consistency
             newWo.dueDate = nextDueDate.toISOString().split('T')[0];
             delete newWo.completedDate;
             delete newWo.completionNotes;
