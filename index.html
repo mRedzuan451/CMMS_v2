@@ -99,14 +99,6 @@
             Create an Account
           </button>
         </div>
-        <div class="mt-4 border-t pt-4">
-          <button
-            id="bypassLoginBtn"
-            class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-          >
-            Bypass Login (Admin)
-          </button>
-        </div>
       </div>
     </div>
 
@@ -1162,19 +1154,26 @@
                 { id: 6, divisionId: 3, name: "G2RS" },
                 { id: 7, divisionId: 3, name: "G2RV" },
               ];
+              const subLines = [
+                { id: 1, name: "Main Assy", departmentId: 1 },
+                { id: 2, name: "Coil Assy", departmentId: 1 },
+                { id: 3, name: "Sub Assy", departmentId: 1 },
+                { id: 4, name: "Main Assy", departmentId: 2 },
+                { id: 5, name: "Coil Assy", departmentId: 2 },
+                { id: 6, name: "Sub Assy", departmentId: 2 },
+              ];
               const productionLines = [
-                { id: 1, departmentId: 1, name: "G2RL #1" },
-                { id: 2, departmentId: 1, name: "G2RL #2" },
-                { id: 3, departmentId: 2, name: "Welding Area" },
-                { id: 4, departmentId: 3, name: "Receiving Dock" },
+                { id: 1, name: "G2RL #1", subLineId: 1 },
+                { id: 2, name: "G2RL #2", subLineId: 1 },
+                { id: 3, name: "G2RL #3", subLineId: 1 },
               ];
               const cabinets = [
-                { id: 1, departmentId: 3, name: "WH-CAB-01" },
-                { id: 2, departmentId: 1, name: "AS-CAB-01" },
+                { id: 1, departmentId: 1, name: "Cabinet A" },
+                { id: 2, departmentId: 1, name: "Cabinet B" },
               ];
               const shelves = [
-                { id: 1, cabinetId: 1, name: "Shelf A" },
-                { id: 2, cabinetId: 1, name: "Shelf B" },
+                { id: 1, cabinetId: 1, name: "Shelf 1" },
+                { id: 2, cabinetId: 1, name: "Shelf 2" },
                 { id: 3, cabinetId: 2, name: "Shelf 1" },
               ];
               const boxes = [
@@ -1185,6 +1184,7 @@
               db.set("locations", {
                 divisions,
                 departments,
+                subLines,
                 productionLines,
                 cabinets,
                 shelves,
@@ -1295,19 +1295,6 @@
                   workOrderHistory: [],
                   transferHistory: [],
                 },
-                {
-                  id: 4,
-                  name: "Forklift",
-                  tag: "FL-001",
-                  category: "Vehicle",
-                  locationId: "pl-4",
-                  status: "Under Maintenance",
-                  purchaseDate: "2020-11-01",
-                  cost: 30000,
-                  currency: "MYR",
-                  workOrderHistory: [],
-                  transferHistory: [],
-                },
               ];
               db.set("assets", assets);
 
@@ -1343,7 +1330,7 @@
                   currency: "MYR",
                   leadTime: "1 day",
                   attachmentRef: "",
-                  relatedAssetIds: [4],
+                  relatedAssetIds: [],
                   transactionHistory: [],
                 },
                 {
@@ -1361,23 +1348,6 @@
                   leadTime: "10 days",
                   attachmentRef: "",
                   relatedAssetIds: [2],
-                  transactionHistory: [],
-                },
-                {
-                  id: 4,
-                  name: "Welding Tip #5",
-                  sku: "WT-05",
-                  quantity: 150,
-                  minQuantity: 50,
-                  locationId: "box-3",
-                  category: "Consumable",
-                  maker: "Lincoln Electric",
-                  supplier: "Welders Friend",
-                  price: 2.25,
-                  currency: "MYR",
-                  leadTime: "2 days",
-                  attachmentRef: "",
-                  relatedAssetIds: [3],
                   transactionHistory: [],
                 },
               ];
@@ -1457,7 +1427,9 @@
             if (state.currentUser.role === "Admin") return true;
 
             const {
+              divisions = [],
               departments = [],
+              subLines = [],
               productionLines = [],
               cabinets = [],
               shelves = [],
@@ -1475,9 +1447,18 @@
                 return false;
               const [type, id] = item.locationId.split("-");
               const numId = parseInt(id);
+
               if (type === "pl") {
                 const pLine = productionLines.find((l) => l.id === numId);
-                if (pLine) itemDepartmentId = pLine.departmentId;
+                if (pLine) {
+                  const subLine = subLines.find(
+                    (sl) => sl.id === pLine.subLineId
+                  );
+                  if (subLine) itemDepartmentId = subLine.departmentId;
+                }
+              } else if (type === "sl") {
+                const subLine = subLines.find((sl) => sl.id === numId);
+                if (subLine) itemDepartmentId = subLine.departmentId;
               } else if (type === "box") {
                 const box = boxes.find((b) => b.id === numId);
                 const shelf = box
@@ -1509,7 +1490,12 @@
                 const numId = parseInt(id);
                 if (type === "pl") {
                   const pLine = productionLines.find((l) => l.id === numId);
-                  if (pLine) itemDepartmentId = pLine.departmentId;
+                  if (pLine) {
+                    const subLine = subLines.find(
+                      (sl) => sl.id === pLine.subLineId
+                    );
+                    if (subLine) itemDepartmentId = subLine.departmentId;
+                  }
                 }
               }
             }
@@ -1571,6 +1557,7 @@
           const {
             divisions = [],
             departments = [],
+            subLines = [],
             productionLines = [],
             cabinets = [],
             shelves = [],
@@ -1583,13 +1570,25 @@
           if (type === "pl") {
             const pLine = productionLines.find((l) => l.id === numId);
             if (!pLine) return "N/A";
-            const dept = departments.find((d) => d.id === pLine.departmentId);
+            const subLine = subLines.find((sl) => sl.id === pLine.subLineId);
+            if (!subLine) return pLine.name;
+            const dept = departments.find((d) => d.id === subLine.departmentId);
             const div = dept
               ? divisions.find((d) => d.id === dept.divisionId)
               : null;
             return `${div ? div.name + " > " : ""}${
               dept ? dept.name + " > " : ""
-            }${pLine.name}`;
+            }${subLine.name} > ${pLine.name}`;
+          } else if (type === "sl") {
+            const subLine = subLines.find((sl) => sl.id === numId);
+            if (!subLine) return "N/A";
+            const dept = departments.find((d) => d.id === subLine.departmentId);
+            const div = dept
+              ? divisions.find((d) => d.id === dept.divisionId)
+              : null;
+            return `${div ? div.name + " > " : ""}${
+              dept ? dept.name + " > " : ""
+            }${subLine.name}`;
           } else if (type === "box") {
             const box = boxes.find((b) => b.id === numId);
             if (!box) return "N/A";
@@ -2055,6 +2054,7 @@
           const {
             divisions = [],
             departments = [],
+            subLines = [],
             productionLines = [],
             cabinets = [],
             shelves = [],
@@ -2138,6 +2138,52 @@
                             </div>
                         </form>
                     </div>
+
+                    <div>
+                        <h2 class="text-xl font-bold mb-4">Sub Lines</h2>
+                        <ul id="subLineList" class="space-y-2 mb-4 max-h-40 overflow-y-auto">
+                            ${
+                              subLines
+                                .map((sl) => {
+                                  const department = departments.find(
+                                    (d) => d.id === sl.departmentId
+                                  );
+                                  return `
+                                <li class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                    <div>
+                                        <p>${sl.name}</p>
+                                        <p class="text-xs text-gray-500">${
+                                          department
+                                            ? department.name
+                                            : "No Department"
+                                        }</p>
+                                    </div>
+                                    <button class="delete-subline-btn text-red-500 hover:text-red-700" data-id="${
+                                      sl.id
+                                    }"><i class="fas fa-trash"></i></button>
+                                </li>`;
+                                })
+                                .join("") ||
+                              '<li class="text-gray-500">No sub lines found.</li>'
+                            }
+                        </ul>
+                        <form id="addSubLineForm" class="border-t pt-4">
+                            <select id="subLineDepartmentSelect" class="w-full mb-2 px-2 py-1 border rounded" required>
+                                <option value="">Select Department</option>
+                                ${departments
+                                  .map(
+                                    (d) =>
+                                      `<option value="${d.id}">${d.name}</option>`
+                                  )
+                                  .join("")}
+                            </select>
+                            <div class="flex gap-2">
+                                <input type="text" id="newSubLineName" class="flex-grow px-2 py-1 border rounded" placeholder="New Sub Line Name" required>
+                                <button type="submit" class="bg-blue-500 text-white px-3 py-1 rounded">+</button>
+                            </div>
+                        </form>
+                    </div>
+
                 </div>
 
                 <div class="bg-white p-4 rounded-lg shadow">
@@ -2146,17 +2192,15 @@
                         ${
                           productionLines
                             .map((pl) => {
-                              const department = departments.find(
-                                (d) => d.id === pl.departmentId
+                              const subLine = subLines.find(
+                                (sl) => sl.id === pl.subLineId
                               );
                               return `
                             <li class="flex justify-between items-center p-2 bg-gray-50 rounded">
                                 <div>
                                     <p>${pl.name}</p>
                                     <p class="text-xs text-gray-500">${
-                                      department
-                                        ? department.name
-                                        : "No Department"
+                                      subLine ? subLine.name : "No Sub Line"
                                     }</p>
                                 </div>
                                 <button class="delete-pline-btn text-red-500 hover:text-red-700" data-id="${
@@ -2170,12 +2214,12 @@
                     </ul>
                     <form id="addProductionLineForm" class="border-t pt-4">
                         <h3 class="font-semibold mb-2">Add New Production Line</h3>
-                        <select id="productionLineDepartmentSelect" class="w-full mb-2 px-2 py-1 border rounded" required>
-                            <option value="">Select Department</option>
-                            ${departments
+                        <select id="productionLineSubLineSelect" class="w-full mb-2 px-2 py-1 border rounded" required>
+                            <option value="">Select Sub Line</option>
+                            ${subLines
                               .map(
-                                (d) =>
-                                  `<option value="${d.id}">${d.name}</option>`
+                                (sl) =>
+                                  `<option value="${sl.id}">${sl.name}</option>`
                               )
                               .join("")}
                         </select>
@@ -2699,9 +2743,17 @@
             const filteredOpLocations = (
               state.currentUser.role === "Admin"
                 ? productionLines
-                : productionLines.filter(
-                    (loc) => loc.departmentId === state.currentUser.departmentId
-                  )
+                : productionLines.filter((loc) => {
+                    const { subLines = [], departments = [] } =
+                      db.get("locations") || {};
+                    const subLine = subLines.find(
+                      (sl) => sl.id === loc.subLineId
+                    );
+                    return (
+                      subLine &&
+                      subLine.departmentId === state.currentUser.departmentId
+                    );
+                  })
             )
               .map(
                 (loc) =>
@@ -4418,18 +4470,35 @@
           logActivity("Location Added", `Added Department: ${name}`);
           renderMainContent();
         }
+        function handleAddSubLine(e) {
+          e.preventDefault();
+          const locations = db.get("locations");
+          const name = document.getElementById("newSubLineName").value;
+          const departmentId = parseInt(
+            document.getElementById("subLineDepartmentSelect").value
+          );
+          if (!locations.subLines) locations.subLines = [];
+          locations.subLines.push({
+            id: getNextIdForLocation("subLines"),
+            name,
+            departmentId,
+          });
+          db.set("locations", locations);
+          logActivity("Location Added", `Added Sub Line: ${name}`);
+          renderMainContent();
+        }
         function handleAddProductionLine(e) {
           e.preventDefault();
           const locations = db.get("locations");
           const name = document.getElementById("newProductionLineName").value;
-          const departmentId = parseInt(
-            document.getElementById("productionLineDepartmentSelect").value
+          const subLineId = parseInt(
+            document.getElementById("productionLineSubLineSelect").value
           );
           if (!locations.productionLines) locations.productionLines = [];
           locations.productionLines.push({
             id: getNextIdForLocation("productionLines"),
             name,
-            departmentId,
+            subLineId,
           });
           db.set("locations", locations);
           logActivity("Location Added", `Added Production Line: ${name}`);
@@ -4498,6 +4567,7 @@
             const locationMap = {
               division: "divisions",
               department: "departments",
+              subLine: "subLines",
               productionLine: "productionLines",
               cabinet: "cabinets",
               shelf: "shelves",
@@ -4549,8 +4619,11 @@
             );
           }
 
-          const { departments = [], productionLines = [] } =
-            db.get("locations") || {};
+          const {
+            departments = [],
+            subLines = [],
+            productionLines = [],
+          } = db.get("locations") || {};
           let groupedByDept = {};
 
           assetsToPrint.forEach((asset) => {
@@ -4561,11 +4634,14 @@
                 (l) => l.id === parseInt(locId)
               );
               if (pLine) {
-                const dept = departments.find(
-                  (d) => d.id === pLine.departmentId
+                const subLine = subLines.find(
+                  (sl) => sl.id === pLine.subLineId
                 );
-                if (dept) {
-                  deptName = dept.name;
+                if (subLine) {
+                  const dept = departments.find(
+                    (d) => d.id === subLine.departmentId
+                  );
+                  if (dept) deptName = dept.name;
                 }
               }
             }
@@ -4744,8 +4820,11 @@
             });
           }
 
-          const { departments = [], productionLines = [] } =
-            db.get("locations") || {};
+          const {
+            departments = [],
+            subLines = [],
+            productionLines = [],
+          } = db.get("locations") || {};
           let groupedByDept = {};
 
           workOrdersToPrint.forEach((wo) => {
@@ -4761,10 +4840,15 @@
                 (l) => l.id === parseInt(locId)
               );
               if (pLine) {
-                const dept = departments.find(
-                  (d) => d.id === pLine.departmentId
+                const subLine = subLines.find(
+                  (sl) => sl.id === pLine.subLineId
                 );
-                if (dept) deptName = dept.name;
+                if (subLine) {
+                  const dept = departments.find(
+                    (d) => d.id === subLine.departmentId
+                  );
+                  if (dept) deptName = dept.name;
+                }
               }
             }
 
@@ -4979,9 +5063,6 @@
           document
             .getElementById("loginForm")
             .addEventListener("submit", handleLogin);
-          document
-            .getElementById("bypassLoginBtn")
-            .addEventListener("click", handleBypassLogin);
           document
             .getElementById("createAccountBtn")
             .addEventListener("click", () => {
@@ -5262,6 +5343,9 @@
               .getElementById("addDepartmentForm")
               .addEventListener("submit", handleAddDepartment);
             document
+              .getElementById("addSubLineForm")
+              .addEventListener("submit", handleAddSubLine);
+            document
               .getElementById("addProductionLineForm")
               .addEventListener("submit", handleAddProductionLine);
 
@@ -5278,6 +5362,13 @@
                 const btn = e.target.closest(".delete-department-btn");
                 if (btn)
                   handleDeleteLocation("department", parseInt(btn.dataset.id));
+              });
+            document
+              .getElementById("subLineList")
+              .addEventListener("click", (e) => {
+                const btn = e.target.closest(".delete-subline-btn");
+                if (btn)
+                  handleDeleteLocation("subLine", parseInt(btn.dataset.id));
               });
             document
               .getElementById("productionLineList")
