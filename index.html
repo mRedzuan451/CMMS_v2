@@ -1163,7 +1163,6 @@
                     return text ? JSON.parse(text) : {};
                 } catch (error) {
                     console.error(`API request failed for ${endpoint}:`, error);
-                    // UPDATED: Check for the specific JSON parse error
                     if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
                          showTemporaryMessage("A server error occurred. Please check the server logs.", true);
                     } else {
@@ -1173,6 +1172,7 @@
                 }
             },
 
+            // GET operations
             getAssets: () => api.request('get_assets.php'),
             getParts: () => api.request('get_parts.php'),
             getUsers: () => api.request('get_users.php'),
@@ -1180,11 +1180,14 @@
             getPartRequests: () => api.request('get_part_requests.php'),
             getLocations: () => api.request('get_locations.php'),
             
+            // AUTH operations
             login: (username, password) => api.request('login.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
             }),
+
+            // ASSET operations
             createAsset: (data) => api.request('create_asset.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1195,9 +1198,20 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             }),
-            deleteAsset: (id) => api.request(`delete_asset.php?id=${id}`, {
-                method: 'POST'
+            deleteAsset: (id) => api.request(`delete_asset.php?id=${id}`, { method: 'POST' }),
+
+            // PARTS operations (NEW)
+            createPart: (data) => api.request('create_part.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
             }),
+            updatePart: (id, data) => api.request(`update_part.php?id=${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }),
+            deletePart: (id) => api.request(`delete_part.php?id=${id}`, { method: 'POST' }),
         };
 
 
@@ -1495,7 +1509,7 @@
           }).length;
 
           const lowStockItems = parts.filter(
-            (p) => p.quantity <= p.minQuantity
+            (p) => parseInt(p.quantity) <= parseInt(p.minQuantity)
           ).length;
 
           const highPriorityWOs = workOrders.filter(
@@ -1590,6 +1604,39 @@
         `;
         }
 
+        function renderPartsPage() {
+          const parts = state.cache.parts.filter(can.view);
+          return `
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold">Spare Parts Management</h1>
+                <div>
+                    <button id="addPartBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                        <i class="fas fa-plus mr-2"></i>Add Part
+                    </button>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <input type="text" id="partSearch" class="w-full mb-4 px-3 py-2 border rounded" placeholder="Search by name, SKU, category, or maker...">
+                <div class="overflow-x-auto">
+                    <table class="w-full" id="partTable">
+                        <thead><tr class="border-b">
+                            <th class="p-2 text-left cursor-pointer" data-sort="name">Part Name <i class="fas fa-sort"></i></th>
+                            <th class="p-2 text-left cursor-pointer" data-sort="sku">SKU <i class="fas fa-sort"></i></th>
+                            <th class="p-2 text-left cursor-pointer" data-sort="category">Category <i class="fas fa-sort"></i></th>
+                            <th class="p-2 text-left cursor-pointer" data-sort="supplier">Supplier <i class="fas fa-sort"></i></th>
+                            <th class="p-2 text-left cursor-pointer" data-sort="quantity">Quantity <i class="fas fa-sort"></i></th>
+                            <th class="p-2 text-left cursor-pointer" data-sort="price">Price <i class="fas fa-sort"></i></th>
+                            <th class="p-2 text-left">Actions</th>
+                        </tr></thead>
+                        <tbody id="partTableBody">
+                            ${generateTableRows("parts", parts)}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        }
+
         function generateTableRows(type, data) {
           if (!data || data.length === 0) {
             return `<tr><td colspan="10" class="text-center p-4 text-gray-500">No data available.</td></tr>`;
@@ -1666,6 +1713,41 @@
                     </tr>`
                 )
                 .join("");
+            case "parts":
+              return data
+                .map(
+                  (part) => `
+                    <tr class="border-b hover:bg-gray-50 ${
+                      parseInt(part.quantity) <= parseInt(part.minQuantity) ? "bg-red-100" : ""
+                    }">
+                        <td class="p-2">${part.name}</td>
+                        <td class="p-2">${part.sku}</td>
+                        <td class="p-2">${part.category || "N/A"}</td>
+                        <td class="p-2">${part.supplier || "N/A"}</td>
+                        <td class="p-2">${part.quantity} ${
+                    parseInt(part.quantity) <= parseInt(part.minQuantity)
+                      ? '<span class="text-red-600 font-bold">(Low)</span>'
+                      : ""
+                  }</td>
+                        <td class="p-2">${
+                          part.price
+                            ? `${part.currency || ""} ${parseFloat(part.price).toFixed(2)}`
+                            : "N/A"
+                        }</td>
+                        <td class="p-2 space-x-2">
+                            <button class="view-part-btn text-blue-500 hover:text-blue-700" data-id="${
+                              part.id
+                            }" title="View Details"><i class="fas fa-eye"></i></button>
+                            <button class="edit-part-btn text-yellow-500 hover:text-yellow-700" data-id="${
+                              part.id
+                            }" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button class="delete-part-btn text-red-500 hover:text-red-700" data-id="${
+                              part.id
+                            }"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>`
+                )
+                .join("");
             default:
                 return '';
           }
@@ -1736,7 +1818,9 @@
             case "assets":
               content = renderAssetsPage();
               break;
-            // ... other cases would also be here
+            case "parts":
+              content = renderPartsPage();
+              break;
             default:
               content = renderDashboard();
           }
@@ -1756,7 +1840,6 @@
         //  PARTITION 6: EVENT HANDLERS & ACTION LOGIC
         // =================================================================================
 
-        // UPDATED: Removed calls to non-existent API endpoints
         async function loadInitialData() {
             try {
                 const [assets, parts, users, workOrders, partRequests, locations] = await Promise.all([
@@ -1766,8 +1849,6 @@
                     api.getWorkOrders(),
                     api.getPartRequests(),
                     api.getLocations(),
-                    // api.getLogs(), // This endpoint doesn't exist yet
-                    // api.getReceivedParts() // This endpoint doesn't exist yet
                 ]);
 
                 state.cache.assets = assets;
@@ -1776,8 +1857,6 @@
                 state.cache.workOrders = workOrders;
                 state.cache.partRequests = partRequests;
                 state.cache.locations = locations;
-                // state.cache.logs = logs;
-                // state.cache.receivedParts = receivedParts;
 
             } catch (error) {
                 showTemporaryMessage("Failed to load initial application data. Please try again.", true);
@@ -1870,6 +1949,60 @@
           }
         }
 
+        async function handlePartFormSubmit(e) {
+          e.preventDefault();
+          const partIdValue = document.getElementById("partId").value;
+          const isEditing = !!partIdValue;
+          
+          const partData = {
+            name: document.getElementById("partName").value,
+            sku: document.getElementById("partSku").value,
+            category: document.getElementById("partCategory").value,
+            quantity: parseInt(document.getElementById("partQuantity").value),
+            minQuantity: parseInt(document.getElementById("partMinQuantity").value),
+            locationId: document.getElementById("partLocation").value,
+            maker: document.getElementById("partMaker").value,
+            supplier: document.getElementById("partSupplier").value,
+            price: parseFloat(document.getElementById("partPrice").value) || 0,
+            currency: document.getElementById("partCurrency").value,
+          };
+
+          try {
+            if (isEditing) {
+              const partId = parseInt(partIdValue);
+              await api.updatePart(partId, partData);
+              await logActivity("Part Updated", `Updated part: ${partData.name} (ID: ${partId})`);
+            } else {
+              await api.createPart(partData);
+              await logActivity("Part Created", `Created part: ${partData.name}`);
+            }
+            
+            state.cache.parts = await api.getParts();
+            document.getElementById("partModal").style.display = "none";
+            await renderMainContent();
+            showTemporaryMessage('Part saved successfully!');
+
+          } catch(error) {
+            showTemporaryMessage('Failed to save part.', true);
+          }
+        }
+
+        async function deletePart(partId) {
+          if (confirm("Are you sure you want to delete this spare part?")) {
+            try {
+                const partToDelete = state.cache.parts.find(p => p.id === partId);
+                await api.deletePart(partId);
+                await logActivity("Part Deleted", `Deleted part: ${partToDelete.name} (ID: ${partId})`);
+                
+                state.cache.parts = await api.getParts();
+                await renderMainContent();
+                showTemporaryMessage('Part deleted successfully.');
+            } catch (error) {
+                showTemporaryMessage('Failed to delete part.', true);
+            }
+          }
+        }
+
         // =================================================================================
         //  PARTITION 7: INITIALIZATION & EVENT LISTENERS
         // =================================================================================
@@ -1906,14 +2039,22 @@
           
           const id = parseInt(button.dataset.id);
 
+          // Asset buttons
           if (button.classList.contains("edit-asset-btn")) showAssetModal(id);
           if (button.classList.contains("delete-asset-btn")) deleteAsset(id);
+
+          // Part buttons
+          if (button.classList.contains("edit-part-btn")) showPartModal(id);
+          if (button.classList.contains("delete-part-btn")) deletePart(id);
         }
 
         function attachPageSpecificEventListeners(page) {
             switch(page) {
                 case 'assets':
                     attachAssetPageEventListeners();
+                    break;
+                case 'parts':
+                    attachPartsPageEventListeners();
                     break;
             }
         }
@@ -1932,6 +2073,24 @@
               );
               document.getElementById("assetTableBody").innerHTML =
                 generateTableRows("assets", filtered);
+            });
+        }
+
+        function attachPartsPageEventListeners() {
+          document.getElementById("addPartBtn")?.addEventListener("click", () => showPartModal());
+          document.getElementById("partForm")?.addEventListener("submit", handlePartFormSubmit);
+          document.getElementById("partSearch")?.addEventListener("input", (e) => {
+              const searchTerm = e.target.value.toLowerCase();
+              const allParts = state.cache.parts.filter(can.view);
+              const filtered = allParts.filter(
+                (p) =>
+                  p.name.toLowerCase().includes(searchTerm) ||
+                  p.sku.toLowerCase().includes(searchTerm) ||
+                  (p.category && p.category.toLowerCase().includes(searchTerm)) ||
+                  (p.maker && p.maker.toLowerCase().includes(searchTerm))
+              );
+              document.getElementById("partTableBody").innerHTML =
+                generateTableRows("parts", filtered);
             });
         }
         
@@ -1962,6 +2121,38 @@
             document.getElementById("assetModalTitle").textContent = "Add Asset";
           }
           document.getElementById("assetModal").style.display = "flex";
+        }
+
+        function showPartModal(partId = null) {
+          const form = document.getElementById("partForm");
+          form.reset();
+          document.getElementById("partId").value = "";
+
+          populateLocationDropdown(
+            document.getElementById("partLocation"),
+            "storage"
+          );
+
+          if (partId) {
+            const part = state.cache.parts.find((p) => p.id === partId);
+            if (part) {
+              document.getElementById("partModalTitle").textContent = "Edit Spare Part";
+              document.getElementById("partId").value = part.id;
+              document.getElementById("partCategory").value = part.category;
+              document.getElementById("partName").value = part.name;
+              document.getElementById("partMaker").value = part.maker;
+              document.getElementById("partSku").value = part.sku;
+              document.getElementById("partQuantity").value = part.quantity;
+              document.getElementById("partMinQuantity").value = part.minQuantity;
+              document.getElementById("partSupplier").value = part.supplier;
+              document.getElementById("partPrice").value = part.price;
+              document.getElementById("partCurrency").value = part.currency;
+              document.getElementById("partLocation").value = part.locationId;
+            }
+          } else {
+            document.getElementById("partModalTitle").textContent = "Add Spare Part";
+          }
+          document.getElementById("partModal").style.display = "flex";
         }
 
         function populateLocationDropdown(selectElement, type = "all") {
@@ -1998,6 +2189,28 @@
 
             if (filteredOpLocations) {
               options += `<optgroup label="Production Lines">${filteredOpLocations}</optgroup>`;
+            }
+          }
+          if (type === "all" || type === "storage") {
+            const filteredStorageLocations = (
+              state.currentUser.role === "Admin"
+                ? boxes
+                : boxes.filter((box) => {
+                    const shelf = state.cache.locations.shelves.find((s) => s.id === box.shelfId);
+                    const cabinet = shelf ? state.cache.locations.cabinets.find((c) => c.id === shelf.cabinetId) : null;
+                    return cabinet && cabinet.departmentId === state.currentUser.departmentId;
+                  })
+            )
+              .map(
+                (loc) =>
+                  `<option value="box-${loc.id}">${getFullLocationName(
+                    `box-${loc.id}`
+                  )}</option>`
+              )
+              .join("");
+
+            if (filteredStorageLocations) {
+              options += `<optgroup label="Storage Boxes">${filteredStorageLocations}</optgroup>`;
             }
           }
           selectElement.innerHTML = options;
